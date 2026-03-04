@@ -1,0 +1,127 @@
+/* IMPORTANT (Tailwind v4):
+   - Do NOT use @tailwind base/components/utilities
+   - Do NOT use @apply for arbitrary utility composition the old way
+   - Use @import "tailwindcss"; and plain CSS, or define tokens + minimal custom CSS.
+
+   If you want @apply heavily, you can downgrade to Tailwind v3.
+   For Tailwind v4 (what your toolchain indicates), the simplest working approach is:
+   - keep most styling as classes in JSX
+   - keep globals.css for tokens + a few plain CSS classes (no @apply)
+*/
+
+@import "tailwindcss";
+
+/* ---------- global base ---------- */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: #f6f8fc;
+  /* base-bg */
+  color: #0b1220;
+  /* base-text */
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(99, 102, 241, 0.25);
+}
+
+/* ---------- custom components (plain CSS, no @apply) ---------- */
+.hero-bg {
+  background:
+    radial-gradient(1200px 600px at 20% 10%, rgba(99, 102, 241, 0.22), transparent 60%),
+    radial-gradient(900px 500px at 80% 10%, rgba(34, 211, 238, 0.16), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.60), rgba(255, 255, 255, 0.0));
+}
+
+.card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.06), rgba(34, 211, 238, 0.04));
+}
+
+.card>* {
+  position: relative;
+  z-index: 1;
+}
+
+.big-input {
+  height: 56px;
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  background: #ffffff;
+  padding: 0 20px;
+  font-size: 16px;
+  color: #0b1220;
+  outline: none;
+  transition: box-shadow 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.big-input::placeholder {
+  color: rgba(75, 85, 99, 0.75);
+}
+
+.big-input:focus {
+  border-color: rgba(99, 102, 241, 0.70);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
+}
+
+.big-btn {
+  height: 56px;
+  border-radius: 16px;
+  padding: 0 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: linear-gradient(180deg, #4f46e5, #4338ca);
+  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.18);
+  cursor: pointer;
+  transition: filter 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.big-btn:hover {
+  filter: brightness(1.03);
+}
+
+.big-btn:active {
+  transform: translateY(1px);
+}
+
+.big-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(99, 102, 241, 0.20);
+  background: rgba(99, 102, 241, 0.10);
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 800;
+}
