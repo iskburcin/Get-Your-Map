@@ -1,0 +1,11 @@
+{
+  "name": "github-info-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
