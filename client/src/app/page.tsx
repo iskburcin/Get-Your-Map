@@ -111,8 +111,7 @@ export default function Page() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-base text-slate-600 sm:text-lg">
-            Enter a username to fetch profile + repos. Next step is roadmap generation using Ollama and storing
-            progress in Neo4j.
+            Enter a username to fetch profile + repos. The roadmap generation is coming soon — currently, this preview only shows the fetched data in a clean format.
           </p>
         </header>
 
@@ -293,7 +292,7 @@ export default function Page() {
         </section>
 
         <footer className="mt-10 text-sm text-slate-500">
-          Next: add role selection + Ollama roadmap generation + save to Neo4j + progress tracking.
+          Used GitHub REST API v3 in backend. Nextjs + React on frontend. Hosted on Vercel.
         </footer>
       </div>
     </div>
