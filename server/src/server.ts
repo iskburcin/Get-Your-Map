@@ -67,11 +67,11 @@ app.use("/", analysisRoutes);
 /**
  * Start server (only locally, not on Vercel)
  */
-if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+// For Render or other standard cloud hosting, always start the server
+if (!process.env.VERCEL) {
     app.listen(PORT, () => {
-        console.log(`Server listening on ${backend}:${PORT}`);
-        console.log(`Health check: ${backend}:${PORT}/health`);
-        console.log(`Example API:  ${backend}:${PORT}/api/github/torvalds`);
+        console.log(`Server listening on port ${PORT}`);
+        console.log(`Health check: /health`);
     });
 }
 

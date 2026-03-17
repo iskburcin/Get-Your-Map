@@ -2,7 +2,8 @@
   "name": "github-info-server",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/server.ts"
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
   },
   "engines": {
     "node": "20.x"
