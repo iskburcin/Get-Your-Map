@@ -65,10 +65,15 @@ app.get("/", (_req, res) => {
 app.use("/", analysisRoutes);
 
 /**
- * Start server
+ * Start server (only locally, not on Vercel)
  */
-app.listen(PORT, () => {
-    console.log(`Server listening on ${backend}:${PORT}`);
-    console.log(`Health check: ${backend}:${PORT}/health`);
-    console.log(`Example API:  ${backend}:${PORT}/api/github/torvalds`);
-});
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    app.listen(PORT, () => {
+        console.log(`Server listening on ${backend}:${PORT}`);
+        console.log(`Health check: ${backend}:${PORT}/health`);
+        console.log(`Example API:  ${backend}:${PORT}/api/github/torvalds`);
+    });
+}
+
+// Export the Express app for Vercel serverless functions
+export default app;

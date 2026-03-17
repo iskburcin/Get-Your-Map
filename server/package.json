@@ -1,7 +1,6 @@
 {
   "name": "github-info-server",
   "private": true,
-  "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts"
   },
