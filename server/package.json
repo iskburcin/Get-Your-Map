@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
     "@babel/parser": "^7.29.2",
     "@babel/traverse": "^7.29.0",
