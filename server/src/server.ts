@@ -1,11 +1,13 @@
 import "dotenv/config";
 import express from "express";
 import analysisRoutes from "./routes/analysis.routes";
+import cors from "cors";
 
 /**
  * Express application
  */
 const app = express();
+app.use(cors());
 app.use(express.json());
 const PORT = process.env.PORT || 4000;
 const backend = process.env.BACKEND_BASE_URL || "http://localhost";
@@ -67,13 +69,11 @@ app.use("/", analysisRoutes);
 /**
  * Start server (only locally, not on Vercel)
  */
-// For Render or other standard cloud hosting, always start the server
-if (!process.env.VERCEL) {
-    app.listen(PORT, () => {
-        console.log(`Server listening on port ${PORT}`);
-        console.log(`Health check: /health`);
-    });
-}
+
+app.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
+    console.log(`Health check: /health`);
+});
 
 // Export the Express app for Vercel serverless functions
 export default app;
