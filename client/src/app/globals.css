@@ -11,6 +11,22 @@
 
 @import "tailwindcss";
 
+:root {
+  --bg-base: #f6f8fc;
+  --text-base: #0b1220;
+
+  --color-primary: #e59346;
+  --color-primary-dark: #e57e22;
+  --color-primary-rgb: 229, 147, 70;
+
+  --color-secondary-rgb: 99, 102, 241;
+  --color-secondary-dark: #a35a30;
+
+  --color-cyan-rgb: 34, 211, 238;
+  --color-border-rgb: 15, 23, 42;
+  --bg-card: #ffffff;
+}
+
 /* ---------- global base ---------- */
 html,
 body {
@@ -18,10 +34,8 @@ body {
 }
 
 body {
-  background: #f6f8fc;
-  /* base-bg */
-  color: #0b1220;
-  /* base-text */
+  background: var(--bg-base);
+  color: var(--text-base);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
     "Apple Color Emoji", "Segoe UI Emoji";
   -webkit-font-smoothing: antialiased;
@@ -29,14 +43,14 @@ body {
 }
 
 ::selection {
-  background: rgba(99, 102, 241, 0.25);
+  background: rgba(var(--color-primary-rgb), 0.25);
 }
 
 /* ---------- custom components (plain CSS, no @apply) ---------- */
 .hero-bg {
   background:
-    radial-gradient(1200px 600px at 20% 10%, rgba(99, 102, 241, 0.22), transparent 60%),
-    radial-gradient(900px 500px at 80% 10%, rgba(34, 211, 238, 0.16), transparent 55%),
+    radial-gradient(1200px 600px at 20% 10%, rgba(var(--color-primary-rgb), 0.22), transparent 60%),
+    radial-gradient(900px 500px at 80% 10%, rgba(var(--color-primary-rgb), 0.16), transparent 55%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.60), rgba(255, 255, 255, 0.0));
 }
 
@@ -44,9 +58,9 @@ body {
   position: relative;
   overflow: hidden;
   border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
-  background: #ffffff;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(var(--color-border-rgb), 0.10);
+  background: var(--bg-card);
+  box-shadow: 0 8px 24px rgba(var(--color-border-rgb), 0.08);
 }
 
 .card::before {
@@ -54,7 +68,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.06), rgba(34, 211, 238, 0.04));
+  background: linear-gradient(180deg, rgba(var(--color-secondary-rgb), 0.06), rgba(var(--color-cyan-rgb), 0.04));
 }
 
 .card>* {
@@ -66,11 +80,11 @@ body {
   height: 56px;
   width: 100%;
   border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
-  background: #ffffff;
+  border: 1px solid rgba(var(--color-border-rgb), 0.10);
+  background: var(--bg-card);
   padding: 0 20px;
   font-size: 16px;
-  color: #0b1220;
+  color: var(--text-base);
   outline: none;
   transition: box-shadow 140ms ease, border-color 140ms ease, transform 140ms ease;
 }
@@ -80,8 +94,8 @@ body {
 }
 
 .big-input:focus {
-  border-color: rgba(99, 102, 241, 0.70);
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
+  border-color: rgba(var(--color-primary-rgb), 0.70);
+  box-shadow: 0 0 0 4px rgba(var(--color-primary-rgb), 0.18);
 }
 
 .big-btn {
@@ -92,8 +106,8 @@ body {
   letter-spacing: -0.01em;
   color: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  background: linear-gradient(180deg, #4f46e5, #4338ca);
-  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.18);
+  background: linear-gradient(180deg, var(--color-primary), var(--color-primary-dark));
+  box-shadow: 0 8px 20px rgba(var(--color-primary-rgb), 0.18);
   cursor: pointer;
   transition: filter 120ms ease, transform 120ms ease, box-shadow 120ms ease;
 }
@@ -119,9 +133,9 @@ body {
   height: 28px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid rgba(99, 102, 241, 0.20);
-  background: rgba(99, 102, 241, 0.10);
-  color: #3730a3;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.20);
+  background: rgba(var(--color-primary-rgb), 0.10);
+  color: var(--color-primary-dark);
   font-size: 12px;
   font-weight: 800;
 }
