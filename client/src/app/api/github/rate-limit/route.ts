@@ -1,20 +1,13 @@
 import { NextResponse } from "next/server";
 
 /**
- * GET request handler for the username endpoint.
- * @param _req - The request.
- * @param params - The parameters.
- * @returns The response.
+ * GET request handler for the rate limit endpoint.
+ * @returns The rate limit response.
  */
 
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ username: string }> }
-) {
-  const { username } = await params;
-
+export async function GET() {
   const backend = process.env.BACKEND_BASE_URL || "http://localhost:4000";
-  const url = `${backend}/api/github/${encodeURIComponent(username)}`;
+  const url = `${backend}/api/github/rate-limit`;
 
   try {
     const resp = await fetch(url, { cache: "no-store" });
@@ -23,7 +16,6 @@ export async function GET(
     const isJson = contentType.includes("application/json");
     const body = isJson ? await resp.json() : await resp.text();
 
-    // Always respond JSON to the browser
     return NextResponse.json(body, { status: resp.status });
   } catch (e) {
     return NextResponse.json(
