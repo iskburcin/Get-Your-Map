@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import analysisRoutes from "./routes/analysis.routes.js";
+import analysisRoutes from "./routes/analysis.routes";
 
 /**
  * Express application

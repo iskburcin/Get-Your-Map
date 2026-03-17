@@ -6,7 +6,7 @@
  */
 
 import path from "path";
-import { analyzeCodeWithRegex } from "./regexMetricService.js";
+import { analyzeCodeWithRegex } from "./regexMetricService";
 
 // We use dynamic imports to prevent the server from crashing if you don't install all of these.
 let ParserClass: any = null;
