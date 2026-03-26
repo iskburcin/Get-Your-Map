@@ -16,6 +16,7 @@ export async function GET(
   const backend = process.env.BACKEND_BASE_URL || "http://localhost:4000";
   const url = `${backend}/api/github/${encodeURIComponent(username)}`;
 
+  console.log(`Request to backend: ${url}`);
   try {
     const resp = await fetch(url, { cache: "no-store" });
 

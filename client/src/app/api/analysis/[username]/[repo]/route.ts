@@ -18,6 +18,7 @@ export async function POST(
   const backend = process.env.BACKEND_BASE_URL || "http://localhost:4000";
   const url = `${backend}/api/analysis/${encodeURIComponent(username)}/${encodeURIComponent(repo)}`;
 
+  console.log(`Forwarding analysis request to backend: ${url}`);
   try {
     const resp = await fetch(url, {
       method: "POST",

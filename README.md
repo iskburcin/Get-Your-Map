@@ -18,7 +18,7 @@ This project is split into two main parts:
 ## ✨ Key Features
 
 - **GitHub Profile Search**: Beautifully formatted profile data and repository lists.
-- **Deep Code Analysis**: Native C++ bindings for Tree-sitter provide blazing-fast AST parsing for a dozen languages.
+- **Deep Code Analysis**: Native C++ bindings for Tree-sitter provide blazing-fast AST parsing for a dozen languages. Cloc is used for line counts. Linguist is used for language detection. 
 - **Complexity Metrics**: Tracks loops, branching, functions, and classes to calculate a cyclomatic-style complexity score.
 - **AI Insights**: Integrated with local Ollama models (like `llama3.1` or `qwen2.5`) to provide human-readable code reviews.
 - **Real-time Monitoring**: Track GitHub API rate limits directly from the UI.
