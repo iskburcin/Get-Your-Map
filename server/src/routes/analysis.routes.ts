@@ -2,8 +2,20 @@ import { Router, Request, Response } from "express";
 import { analyzeRepository } from "../services/codeAnalysis/codeAnalysisEngine";
 import { callOllama, checkOllamaHealth } from "../services/ollama/ollamaClient";
 import { generateCodeAnalysisPrompt, generateRoadmapPrompt } from "../services/ollama/prompts";
+import { createHashFromObject } from "../utils/hash";
+import { isMongoConnected } from "../db/mongo";
+import { GithubProfileCacheModel } from "../models/githubProfileCache.model";
+import { RepoAnalysisCacheModel } from "../models/repoAnalysisCache.model";
+import { fetchRepoMetadata } from "../services/github/repoMetadataService";
+import { compareCommits } from "../services/github/commitComparator";
+import { fetchAllSourceFiles, fetchSpecificFiles, mergeFileChanges } from "../services/github/fileStreamService";
+import { RepoFilesCacheModel } from "../models/repoFilesCache.model";
 
 const router = Router();
+
+function cacheLog(scope: "profile" | "repo-files" | "analysis", message: string) {
+    console.log(`[cache:${scope}] ${message}`);
+}
 
 /**
  * Get GitHub API headers
@@ -48,14 +60,122 @@ router.get("/api/analysis/health", async (_req: Request, res: Response) => {
 /**
  * POST /api/analysis/:username/:repo
  * Analyze a repository and generate a roadmap for a target role
- * 
  */
 router.post("/api/analysis/:username/:repo", async (req: Request, res: Response) => {
     const username = req.params.username as string;
     const repo = req.params.repo as string;
     const { targetRole } = req.body;
+    const normalizedTargetRole = typeof targetRole === "string" ? targetRole.trim().toLowerCase() : "";
+    const mongoReady = isMongoConnected();
+
+    if (!mongoReady) {
+        cacheLog("repo-files", `skip (mongo disconnected) for ${username}/${repo}`);
+        cacheLog("analysis", `skip (mongo disconnected) for ${username}/${repo}`);
+    }
 
     try {
+        let repoHeadSha: string | null = null;
+
+        try {
+            const metadata = await fetchRepoMetadata(username, repo);
+            repoHeadSha = metadata.headSha;
+            const defaultBranch = metadata.defaultBranch;
+
+            // Step 1: Check for file changes and update file cache
+            if (mongoReady) {
+                const cachedFiles = await RepoFilesCacheModel.findOne(
+                    { owner: username, repo, branch: defaultBranch },
+                    { commitSha: 1, filesTree: 1 }
+                ).lean();
+
+                const previousSha = cachedFiles?.commitSha || null;
+                const commitComparison = await compareCommits(username, repo, previousSha, repoHeadSha);
+
+                if (!commitComparison.sameCommit) {
+                    cacheLog(
+                        "repo-files",
+                        `miss ${username}/${repo} ${previousSha?.slice(0, 7) || "initial"}->${repoHeadSha.slice(0, 7)} (c:${commitComparison.changedFiles.length},a:${commitComparison.addedFiles.length},r:${commitComparison.removedFiles.length})`
+                    );
+
+                    let updatedFiles = cachedFiles?.filesTree || [];
+
+                    if (cachedFiles && cachedFiles.filesTree.length > 0) {
+                        const changedFileContents = await fetchSpecificFiles(
+                            username,
+                            repo,
+                            commitComparison.changedFiles,
+                            repoHeadSha
+                        );
+                        const addedFileContents = await fetchSpecificFiles(
+                            username,
+                            repo,
+                            commitComparison.addedFiles,
+                            repoHeadSha
+                        );
+
+                        updatedFiles = mergeFileChanges(
+                            cachedFiles.filesTree,
+                            changedFileContents,
+                            addedFileContents,
+                            commitComparison.removedFiles
+                        );
+                    } else {
+                        updatedFiles = await fetchAllSourceFiles(username, repo, 100, repoHeadSha);
+                    }
+
+                    await RepoFilesCacheModel.findOneAndUpdate(
+                        { owner: username, repo, branch: defaultBranch },
+                        {
+                            owner: username,
+                            repo,
+                            commitSha: repoHeadSha,
+                            branch: defaultBranch,
+                            filesTree: updatedFiles,
+                            totalFiles: updatedFiles.length,
+                            lastSourceSyncAt: new Date(),
+                            lastServedAt: new Date()
+                        },
+                        { upsert: true, new: true, setDefaultsOnInsert: true }
+                    );
+
+                    cacheLog("repo-files", `stored ${username}/${repo} files=${updatedFiles.length}`);
+                } else {
+                    cacheLog("repo-files", `hit ${username}/${repo} sha=${repoHeadSha.slice(0, 7)}`);
+                }
+            }
+
+            // Step 2: Check for cached analysis result (if commit unchanged)
+            if (mongoReady) {
+                const cached = await RepoAnalysisCacheModel.findOne({
+                    owner: username,
+                    repo,
+                    targetRole: normalizedTargetRole,
+                    repoHeadSha
+                }).lean();
+
+                if (cached?.responsePayload) {
+                    await RepoAnalysisCacheModel.updateOne(
+                        { _id: cached._id },
+                        { $set: { lastServedAt: new Date() } }
+                    );
+
+                    cacheLog("analysis", `hit ${username}/${repo} sha=${repoHeadSha?.slice(0, 7)} role=${normalizedTargetRole || "none"}`);
+
+                    return res.json({
+                        ...cached.responsePayload,
+                        cache: {
+                            status: "hit",
+                            key: `${username}/${repo}@${repoHeadSha}`
+                        }
+                    });
+                }
+
+                cacheLog("analysis", `miss ${username}/${repo} sha=${repoHeadSha?.slice(0, 7)} role=${normalizedTargetRole || "none"}`);
+            }
+        } catch (metadataError) {
+            console.warn(`Could not fetch repository metadata or files for ${username}/${repo}:`, metadataError);
+        }
+
         // 1) Code analysis
         console.log(`Analyzing ${username}/${repo}...`);
         const analysisResults = await analyzeRepository(username, repo);
@@ -118,7 +238,7 @@ router.post("/api/analysis/:username/:repo", async (req: Request, res: Response)
         }
 
         // 5) Response gönder
-        res.json({
+        const responsePayload = {
             repository: {
                 owner: username,
                 name: repo
@@ -127,6 +247,39 @@ router.post("/api/analysis/:username/:repo", async (req: Request, res: Response)
             ollamaAnalysis,
             roadmap: roadmap || null,
             timestamp: new Date().toISOString()
+        };
+
+        if (mongoReady && repoHeadSha) {
+            await RepoAnalysisCacheModel.findOneAndUpdate(
+                {
+                    owner: username,
+                    repo,
+                    targetRole: normalizedTargetRole,
+                    repoHeadSha
+                },
+                {
+                    owner: username,
+                    repo,
+                    targetRole: normalizedTargetRole,
+                    repoHeadSha,
+                    responsePayload,
+                    lastSourceSyncAt: new Date(),
+                    lastServedAt: new Date()
+                },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+
+            cacheLog("analysis", `stored ${username}/${repo} sha=${repoHeadSha.slice(0, 7)} role=${normalizedTargetRole || "none"}`);
+        } else if (mongoReady && !repoHeadSha) {
+            cacheLog("analysis", `skip store ${username}/${repo} (missing repo head sha)`);
+        }
+
+        res.json({
+            ...responsePayload,
+            cache: {
+                status: "miss",
+                key: repoHeadSha ? `${username}/${repo}@${repoHeadSha}` : null
+            }
         });
     } catch (err) {
         console.error("Analysis error:", err);
@@ -161,6 +314,11 @@ router.get("/api/github/rate-limit", async (_req: Request, res: Response) => {
 router.get("/api/github/:username", async (req: Request, res: Response) => {
     const username = (req.params.username as string || "").trim();
     if (!username) return res.status(400).json({ error: "Username is required." });
+    const mongoReady = isMongoConnected();
+
+    if (!mongoReady) {
+        cacheLog("profile", `skip (mongo disconnected) for ${username}`);
+    }
 
     try {
         const query = `
@@ -247,8 +405,58 @@ router.get("/api/github/:username", async (req: Request, res: Response) => {
             }))
         };
 
+        const profileHash = createHashFromObject(payload.profile);
+        const reposHash = createHashFromObject(payload.repos);
+
+        if (mongoReady) {
+            const cached = await GithubProfileCacheModel.findOne({ username }).lean();
+
+            if (cached && cached.profileHash === profileHash && cached.reposHash === reposHash) {
+                await GithubProfileCacheModel.updateOne(
+                    { _id: cached._id },
+                    { $set: { lastServedAt: new Date() } }
+                );
+
+                cacheLog("profile", `hit ${username} (unchanged snapshot)`);
+
+                res.setHeader("Cache-Control", "no-store");
+                return res.json({
+                    profile: cached.profile,
+                    repos: cached.repos,
+                    cache: {
+                        status: "hit",
+                        changed: false
+                    }
+                });
+            }
+
+            cacheLog("profile", `miss ${username} (changed snapshot)`);
+
+            await GithubProfileCacheModel.findOneAndUpdate(
+                { username },
+                {
+                    username,
+                    profile: payload.profile,
+                    repos: payload.repos,
+                    profileHash,
+                    reposHash,
+                    lastSourceSyncAt: new Date(),
+                    lastServedAt: new Date()
+                },
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+
+            cacheLog("profile", `stored ${username}`);
+        }
+
         res.setHeader("Cache-Control", "no-store");
-        res.json(payload);
+        res.json({
+            ...payload,
+            cache: {
+                status: "miss",
+                changed: true
+            }
+        });
     } catch (err) {
         res.status(500).json({ error: "Server error", details: String(err) });
     }
