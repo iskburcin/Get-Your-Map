@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import analysisRoutes from "./routes/analysis.routes";
 import cors from "cors";
+import { connectMongoDB } from "./db/mongo";
 
 /**
  * Express application
@@ -70,10 +71,15 @@ app.use("/", analysisRoutes);
  * Start server (only locally, not on Vercel)
  */
 
-app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
-    console.log(`Health check: /health`);
-});
+async function startServer() {
+    await connectMongoDB();
+
+    app.listen(PORT, () => {
+        console.log(`Server listening on port ${backend}:${PORT}`);
+    });
+}
+
+void startServer();
 
 // Export the Express app for Vercel serverless functions
 export default app;
