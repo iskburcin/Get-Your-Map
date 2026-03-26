@@ -31,6 +31,12 @@ export type AnalysisResponse = {
   };
   ollamaAnalysis: string;
   roadmap: string | null;
+  cache?: { status: "hit" | "miss"; key?: string | null };
+  backendPaceMs?: {
+    current: number;
+    previous?: number;
+    diff?: number;
+  };
 };
 
 /**
@@ -43,4 +49,9 @@ export type AnalysisState = {
   loading: boolean;
   data?: AnalysisResponse;
   error?: string;
+  fetchPaceMs?: {
+    current: number;
+    previous?: number;
+    diff?: number;
+  };
 };

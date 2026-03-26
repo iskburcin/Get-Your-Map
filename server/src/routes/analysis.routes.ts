@@ -12,9 +12,42 @@ import { fetchAllSourceFiles, fetchSpecificFiles, mergeFileChanges } from "../se
 import { RepoFilesCacheModel } from "../models/repoFilesCache.model";
 
 const router = Router();
+const profilePaceByUsername = new Map<string, number>();
+const analysisPaceByKey = new Map<string, number>();
+
+type PaceMeta = {
+    current: number;
+    previous?: number;
+    diff?: number;
+};
 
 function cacheLog(scope: "profile" | "repo-files" | "analysis", message: string) {
     console.log(`[cache:${scope}] ${message}`);
+}
+
+function trackPace(
+    scope: "profile" | "analysis",
+    key: string,
+    startedAtMs: number
+): PaceMeta {
+    const map = scope === "profile" ? profilePaceByUsername : analysisPaceByKey;
+    const current = Date.now() - startedAtMs;
+    const previous = map.get(key);
+    const diff = previous == null ? undefined : current - previous;
+
+    map.set(key, current);
+
+    console.log(
+        `[pace:${scope}] key=${key} current=${current}ms previous=${previous ?? "none"}${
+            diff == null ? "" : ` diff=${diff > 0 ? "+" : ""}${diff}ms`
+        }`
+    );
+
+    if (previous == null) {
+        return { current };
+    }
+
+    return { current, previous, diff };
 }
 
 /**
@@ -62,10 +95,12 @@ router.get("/api/analysis/health", async (_req: Request, res: Response) => {
  * Analyze a repository and generate a roadmap for a target role
  */
 router.post("/api/analysis/:username/:repo", async (req: Request, res: Response) => {
+    const analysisStartedAtMs = Date.now();
     const username = req.params.username as string;
     const repo = req.params.repo as string;
     const { targetRole } = req.body;
     const normalizedTargetRole = typeof targetRole === "string" ? targetRole.trim().toLowerCase() : "";
+    const analysisPaceKey = `${username}/${repo}:${normalizedTargetRole || "none"}`;
     const mongoReady = isMongoConnected();
 
     if (!mongoReady) {
@@ -160,9 +195,11 @@ router.post("/api/analysis/:username/:repo", async (req: Request, res: Response)
                     );
 
                     cacheLog("analysis", `hit ${username}/${repo} sha=${repoHeadSha?.slice(0, 7)} role=${normalizedTargetRole || "none"}`);
+                    const backendPaceMs = trackPace("analysis", analysisPaceKey, analysisStartedAtMs);
 
                     return res.json({
                         ...cached.responsePayload,
+                        backendPaceMs,
                         cache: {
                             status: "hit",
                             key: `${username}/${repo}@${repoHeadSha}`
@@ -274,8 +311,10 @@ router.post("/api/analysis/:username/:repo", async (req: Request, res: Response)
             cacheLog("analysis", `skip store ${username}/${repo} (missing repo head sha)`);
         }
 
+        const backendPaceMs = trackPace("analysis", analysisPaceKey, analysisStartedAtMs);
         res.json({
             ...responsePayload,
+            backendPaceMs,
             cache: {
                 status: "miss",
                 key: repoHeadSha ? `${username}/${repo}@${repoHeadSha}` : null
@@ -312,6 +351,7 @@ router.get("/api/github/rate-limit", async (_req: Request, res: Response) => {
  * Get user data from GitHub API
  */
 router.get("/api/github/:username", async (req: Request, res: Response) => {
+    const profileStartedAtMs = Date.now();
     const username = (req.params.username as string || "").trim();
     if (!username) return res.status(400).json({ error: "Username is required." });
     const mongoReady = isMongoConnected();
@@ -418,11 +458,13 @@ router.get("/api/github/:username", async (req: Request, res: Response) => {
                 );
 
                 cacheLog("profile", `hit ${username} (unchanged snapshot)`);
+                const backendPaceMs = trackPace("profile", username, profileStartedAtMs);
 
                 res.setHeader("Cache-Control", "no-store");
                 return res.json({
                     profile: cached.profile,
                     repos: cached.repos,
+                    backendPaceMs,
                     cache: {
                         status: "hit",
                         changed: false
@@ -449,9 +491,11 @@ router.get("/api/github/:username", async (req: Request, res: Response) => {
             cacheLog("profile", `stored ${username}`);
         }
 
+        const backendPaceMs = trackPace("profile", username, profileStartedAtMs);
         res.setHeader("Cache-Control", "no-store");
         res.json({
             ...payload,
+            backendPaceMs,
             cache: {
                 status: "miss",
                 changed: true

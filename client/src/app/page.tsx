@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ApiSuccess, ApiError } from "../types";
+import { ApiSuccess, ApiError, PaceMs } from "../types";
 import HeroHeader from "../components/HeroHeader";
 import SearchForm from "../components/SearchForm";
 import ProfileCard from "../components/ProfileCard";
@@ -29,6 +29,8 @@ export default function Page() {
    * State for the data.
    */
   const [data, setData] = useState<ApiSuccess | null>(null);
+  const [profileFetchPaceMs, setProfileFetchPaceMs] = useState<PaceMs | null>(null);
+  const [profileFetchPaceByUsername, setProfileFetchPaceByUsername] = useState<Record<string, PaceMs>>({});
 
   const repos = data?.repos ?? [];
   const topLanguages = useMemo(() => {
@@ -45,6 +47,7 @@ export default function Page() {
    * @returns {Promise<void>} The user info.
    */
   async function getInfo() {
+    const startedAt = performance.now();
     const u = username.trim();
     setError("");
     setData(null);
@@ -58,6 +61,31 @@ export default function Page() {
     try {
       const resp = await fetch(`/api/github/${encodeURIComponent(u)}`, { cache: "no-store" });
       const json = (await resp.json()) as ApiSuccess | ApiError;
+      const elapsedMs = Math.round(performance.now() - startedAt);
+
+      setProfileFetchPaceByUsername((prevMap) => {
+        const prevForUser = prevMap[u];
+        const next: PaceMs = {
+          current: elapsedMs,
+          ...(prevForUser?.current != null
+            ? {
+              previous: prevForUser.current,
+              diff: elapsedMs - prevForUser.current
+            }
+            : {})
+        };
+
+        console.log(
+          `[client:profile-pace] current=${next.current}ms prev=${next.previous ?? "none"} diff=${next.diff ?? "none"}`
+        );
+
+        setProfileFetchPaceMs(next);
+
+        return {
+          ...prevMap,
+          [u]: next
+        };
+      });
 
       if (!resp.ok) {
         setError((json as ApiError).error || "Request failed");
@@ -98,6 +126,42 @@ export default function Page() {
             loading={loading}
             getInfo={getInfo}
           />
+
+          {profileFetchPaceMs ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+              <span className="font-bold">Profile Fetch Pace:</span>{" "}
+              <span>current {profileFetchPaceMs.current}ms</span>
+              {profileFetchPaceMs.previous != null ? (
+                <>
+                  <span className="mx-2 text-slate-300">|</span>
+                  <span>previous {profileFetchPaceMs.previous}ms</span>
+                </>
+              ) : null}
+              {profileFetchPaceMs.diff != null ? (
+                <>
+                  <span className="mx-2 text-slate-300">|</span>
+                  <span>
+                    diff {`${profileFetchPaceMs.diff > 0 ? "+" : ""}${profileFetchPaceMs.diff}ms`}
+                  </span>
+                </>
+              ) : null}
+              {data?.cache?.status ? (
+                <>
+                  <span className="mx-2 text-slate-300">|</span>
+                  <span>cache {data.cache.status}</span>
+                </>
+              ) : null}
+              {data?.backendPaceMs ? (
+                <>
+                  <span className="mx-2 text-slate-300">|</span>
+                  <span>backend {data.backendPaceMs.current}ms</span>
+                  {data.backendPaceMs.previous != null ? (
+                    <span> (prev {data.backendPaceMs.previous}ms)</span>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           {error ? (
             <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">

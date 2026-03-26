@@ -30,10 +30,11 @@ export default function RepoItem({ repo: r, username }: { repo: Repo, username: 
    * Analyzes the repository.
    */
   async function analyzeRepo() {
+    const startedAt = performance.now();
     const u = username.trim();
     if (!u) return;
 
-    setAnalysisState({ loading: true });
+    setAnalysisState((prev) => ({ ...prev, loading: true, error: undefined }));
 
     try {
       const res = await fetch(`/api/analysis/${encodeURIComponent(u)}/${encodeURIComponent(r.name)}`, {
@@ -44,18 +45,74 @@ export default function RepoItem({ repo: r, username }: { repo: Repo, username: 
 
       if (!res.ok) {
         const errorRes = await res.json().catch(() => ({}));
-        setAnalysisState({
-          loading: false,
-          error: errorRes.details || errorRes.error || "Analysis failed",
-          data: errorRes.analysis ? ({ codeAnalysis: errorRes.analysis, ollamaAnalysis: "" } as any) : undefined
+        const elapsedMs = Math.round(performance.now() - startedAt);
+
+        setAnalysisState((prev) => {
+          const fetchPaceMs = {
+            current: elapsedMs,
+            ...(prev.fetchPaceMs?.current != null
+              ? {
+                previous: prev.fetchPaceMs.current,
+                diff: elapsedMs - prev.fetchPaceMs.current
+              }
+              : {})
+          };
+
+          console.log(
+            `[client:analysis-pace] ${u}/${r.name} current=${fetchPaceMs.current}ms prev=${fetchPaceMs.previous ?? "none"} diff=${fetchPaceMs.diff ?? "none"}`
+          );
+
+          return {
+            loading: false,
+            error: errorRes.details || errorRes.error || "Analysis failed",
+            data: errorRes.analysis ? ({ codeAnalysis: errorRes.analysis, ollamaAnalysis: "" } as any) : undefined,
+            fetchPaceMs
+          };
         });
+
         return;
       }
 
       const resData = (await res.json()) as AnalysisResponse;
-      setAnalysisState({ loading: false, data: resData });
+      const elapsedMs = Math.round(performance.now() - startedAt);
+
+      setAnalysisState((prev) => {
+        const fetchPaceMs = {
+          current: elapsedMs,
+          ...(prev.fetchPaceMs?.current != null
+            ? {
+              previous: prev.fetchPaceMs.current,
+              diff: elapsedMs - prev.fetchPaceMs.current
+            }
+            : {})
+        };
+
+        console.log(
+          `[client:analysis-pace] ${u}/${r.name} current=${fetchPaceMs.current}ms prev=${fetchPaceMs.previous ?? "none"} diff=${fetchPaceMs.diff ?? "none"}`
+        );
+
+        return { loading: false, data: resData, fetchPaceMs };
+      });
     } catch (err) {
-      setAnalysisState({ loading: false, error: String(err) });
+      const elapsedMs = Math.round(performance.now() - startedAt);
+
+      setAnalysisState((prev) => {
+        const fetchPaceMs = {
+          current: elapsedMs,
+          ...(prev.fetchPaceMs?.current != null
+            ? {
+              previous: prev.fetchPaceMs.current,
+              diff: elapsedMs - prev.fetchPaceMs.current
+            }
+            : {})
+        };
+
+        console.log(
+          `[client:analysis-pace] ${u}/${r.name} current=${fetchPaceMs.current}ms prev=${fetchPaceMs.previous ?? "none"} diff=${fetchPaceMs.diff ?? "none"}`
+        );
+
+        return { loading: false, error: String(err), fetchPaceMs };
+      });
     }
   }
 
@@ -103,6 +160,44 @@ export default function RepoItem({ repo: r, username }: { repo: Repo, username: 
         {analysisState.error && (
           <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-100">
             <span className="font-bold">Error:</span> {analysisState.error}
+          </div>
+        )}
+
+        {analysisState.fetchPaceMs && (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+            <span className="font-bold">Analysis Fetch Pace:</span>{" "}
+            <span>current {analysisState.fetchPaceMs.current}ms</span>
+            {analysisState.fetchPaceMs.previous != null ? (
+              <>
+                <span className="mx-2 text-slate-300">|</span>
+                <span>previous {analysisState.fetchPaceMs.previous}ms</span>
+              </>
+            ) : null}
+            {analysisState.fetchPaceMs.diff != null ? (
+              <>
+                <span className="mx-2 text-slate-300">|</span>
+                <span>
+                  diff {`${analysisState.fetchPaceMs.diff > 0 ? "+" : ""}${analysisState.fetchPaceMs.diff}ms`}
+                </span>
+              </>
+            ) : null}
+            {analysisState.data?.cache?.status ? (
+              <>
+                <span className="mx-2 text-slate-300">|</span>
+                <span>cache {analysisState.data.cache.status}</span>
+              </>
+            ) : null}
+            {analysisState.data?.backendPaceMs ? (
+              <>
+                <span className="mx-2 text-slate-300">|</span>
+                <span>
+                  backend {analysisState.data.backendPaceMs.current}ms
+                  {analysisState.data.backendPaceMs.previous != null
+                    ? ` (prev ${analysisState.data.backendPaceMs.previous}ms)`
+                    : ""}
+                </span>
+              </>
+            ) : null}
           </div>
         )}
 
