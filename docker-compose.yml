@@ -1,0 +1,56 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: gym_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: gym_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: gym_server
+    restart: unless-stopped
+    depends_on:
+      - mongo
+      - ollama
+    environment:
+      PORT: 4000
+      BACKEND_BASE_URL: http://server
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017}
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME:-github_info_ui}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
+    ports:
+      - "4000:4000"
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: gym_client
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      PORT: 3000
+      BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://server:4000}
+    ports:
+      - "3000:3000"
+
+volumes:
+  mongo_data:
+  ollama_data:

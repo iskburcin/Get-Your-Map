@@ -1,7 +1,22 @@
 import { Octokit } from "@octokit/rest";
 
+/**
+ * Service for comparing two commits in a GitHub repository. It uses the GitHub API to fetch the differences between two commits and categorizes the changed files into added, removed, and modified/renamed. If the commits are the same, it returns empty lists for changed, added, and removed files.
+ * @module commitComparator
+ * @requires @octokit/rest
+ */
 const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
 
+/**
+ * Interface representing the result of comparing two commits. It includes the base and head commit SHAs, lists of changed, added, and removed files, and a boolean indicating if the commits are the same.
+ * @interface CommitComparison
+ * @property {string} baseCommitSha - The SHA of the base commit
+ * @property {string} headCommitSha - The SHA of the head commit
+ * @property {string[]} changedFiles - List of files that have been changed
+ * @property {string[]} addedFiles - List of files that have been added
+ * @property {string[]} removedFiles - List of files that have been removed
+ * @property {boolean} sameCommit - Boolean indicating if the commits are the same
+ */
 export interface CommitComparison {
     baseCommitSha: string;
     headCommitSha: string;

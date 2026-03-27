@@ -44,6 +44,20 @@ npm run dev
 
 Visit [http://localhost:3000](http://localhost:3000) to see the app!
 
+## 🐳 Docker (Beginner Friendly)
+
+You can now run the whole stack with Docker Compose:
+
+```bash
+cp .env.docker.example .env.docker
+docker compose --env-file .env.docker up --build
+```
+
+See [`DEPLOYMENT_FREE_GUIDE.md`](./DEPLOYMENT_FREE_GUIDE.md) for:
+- local Docker setup,
+- free hosting architecture,
+- and remote Ollama tunnel strategy.
+
 ## 🌐 Live Deployments
 
 - **🌐 Live App**: [https://get-your-map.vercel.app/](https://get-your-map.vercel.app/)
