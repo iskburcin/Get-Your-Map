@@ -53,7 +53,22 @@ export async function callOllama(
     const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434";
 
     try {
-        console.log(`Calling Ollama (${req.model}) at ${ollamaUrl}...`);
+        let resolvedModel = req.model;
+        const availableModels = await listOllamaModels();
+
+        if (availableModels.length === 0) {
+            throw new Error(`No models available in Ollama at ${ollamaUrl}. Pull a model first.`);
+        }
+
+        if (!availableModels.includes(resolvedModel)) {
+            const fallbackModel = availableModels[0];
+            console.warn(
+                `Requested Ollama model \"${resolvedModel}\" is not available. Falling back to \"${fallbackModel}\".`
+            );
+            resolvedModel = fallbackModel;
+        }
+
+        console.log(`Calling Ollama (${resolvedModel}) at ${ollamaUrl}...`);
 
         const response = await fetch(`${ollamaUrl}/api/generate`, {
             method: "POST",
@@ -61,7 +76,7 @@ export async function callOllama(
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: req.model,
+                model: resolvedModel,
                 prompt: req.prompt,
                 stream: false,
                 temperature: req.temperature || 0.7,
@@ -71,7 +86,8 @@ export async function callOllama(
         });
 
         if (!response.ok) {
-            throw new Error(`Ollama error: ${response.statusText}`);
+            const responseText = await response.text();
+            throw new Error(`Ollama error: ${response.status} ${response.statusText} - ${responseText}`);
         }
 
         const data = (await response.json()) as OllamaResponse;
@@ -106,8 +122,11 @@ export async function listOllamaModels(): Promise<string[]> {
 
     try {
         const response = await fetch(`${ollamaUrl}/api/tags`);
+        if (!response.ok) {
+            return [];
+        }
         const data = (await response.json()) as { models: Array<{ name: string }> };
-        return data.models.map((m) => m.name);
+        return (data.models || []).map((m) => m.name).filter(Boolean);
     } catch (err) {
         console.error("Error listing models:", err);
         return [];
