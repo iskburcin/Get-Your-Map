@@ -8,7 +8,7 @@ import RepoItem from "./RepoItem";
  * @returns The RepoList component.
  */
 
-export default function RepoList({ repos, username }: { repos: Repo[], username: string }) {
+export default function RepoList({ repos, username, selectedModel }: { repos: Repo[], username: string, selectedModel: string }) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex items-center justify-between gap-3">
@@ -21,7 +21,7 @@ export default function RepoList({ repos, username }: { repos: Repo[], username:
       {repos.length ? (
         <ul className="mt-4 grid gap-3">
           {repos.map((r) => (
-            <RepoItem key={r.html_url} repo={r} username={username} />
+            <RepoItem key={r.html_url} repo={r} username={username} selectedModel={selectedModel} />
           ))}
         </ul>
       ) : (

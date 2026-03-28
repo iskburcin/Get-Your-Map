@@ -39,6 +39,25 @@ export type AnalysisResponse = {
   };
 };
 
+export type AnalysisJobStatus = "queued" | "running" | "completed" | "failed";
+export type AnalysisJobStep = "queued" | "metrics" | "ollama" | "roadmap" | "completed";
+
+export type AnalysisJobPollResponse = {
+  jobId: string;
+  status: AnalysisJobStatus;
+  step: AnalysisJobStep;
+  stepLabel: string;
+  progress: number;
+  data?: Partial<AnalysisResponse>;
+  error?: string;
+};
+
+export type AnalysisModelsResponse = {
+  models: string[];
+  selectedRepoModel: string;
+  selectedCoderModel: string;
+};
+
 /**
  * AnalysisState type for storing the analysis state of the API.
  * @property {boolean} loading - Whether the analysis is loading.
@@ -48,7 +67,13 @@ export type AnalysisResponse = {
 export type AnalysisState = {
   loading: boolean;
   data?: AnalysisResponse;
+  partialData?: Partial<AnalysisResponse>;
   error?: string;
+  jobId?: string;
+  progress?: number;
+  progressStep?: AnalysisJobStep;
+  progressLabel?: string;
+  status?: AnalysisJobStatus;
   fetchPaceMs?: {
     current: number;
     previous?: number;

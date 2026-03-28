@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Repo, AnalysisState, AnalysisResponse } from "../types";
+import {
+  Repo,
+  AnalysisState,
+  AnalysisJobPollResponse
+} from "../types";
+import AnalysisProgressChecklist from "./AnalysisProgressChecklist";
 
 /**
  * Formats a date string to a more readable format.
@@ -23,8 +28,28 @@ function formatDate(iso: string) {
  * @returns The RepoItem component.
  */
 
-export default function RepoItem({ repo: r, username }: { repo: Repo, username: string }) {
+export default function RepoItem({ repo: r, username, selectedModel }: { repo: Repo, username: string, selectedModel: string }) {
   const [analysisState, setAnalysisState] = useState<AnalysisState>({ loading: false });
+
+  const shownData = analysisState.data ?? analysisState.partialData;
+
+  function withFetchPace(prev: AnalysisState, elapsedMs: number) {
+    const fetchPaceMs = {
+      current: elapsedMs,
+      ...(prev.fetchPaceMs?.current != null
+        ? {
+          previous: prev.fetchPaceMs.current,
+          diff: elapsedMs - prev.fetchPaceMs.current
+        }
+        : {})
+    };
+
+    console.log(
+      `[client:analysis-pace] ${username}/${r.name} current=${fetchPaceMs.current}ms prev=${fetchPaceMs.previous ?? "none"} diff=${fetchPaceMs.diff ?? "none"}`
+    );
+
+    return fetchPaceMs;
+  }
 
   /**
    * Analyzes the repository.
@@ -34,38 +59,35 @@ export default function RepoItem({ repo: r, username }: { repo: Repo, username: 
     const u = username.trim();
     if (!u) return;
 
-    setAnalysisState((prev) => ({ ...prev, loading: true, error: undefined }));
+    setAnalysisState((prev) => ({
+      ...prev,
+      loading: true,
+      error: undefined,
+      data: undefined,
+      partialData: undefined,
+      status: "queued",
+      progressStep: "queued",
+      progressLabel: "Queued",
+      progress: 5
+    }));
 
     try {
-      const res = await fetch(`/api/analysis/${encodeURIComponent(u)}/${encodeURIComponent(r.name)}`, {
+      const startRes = await fetch(`/api/analysis/${encodeURIComponent(u)}/${encodeURIComponent(r.name)}/jobs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetRole: "" }),
+        body: JSON.stringify({ targetRole: "", model: selectedModel || undefined }),
       });
 
-      if (!res.ok) {
-        const errorRes = await res.json().catch(() => ({}));
+      if (!startRes.ok) {
+        const errorRes = await startRes.json().catch(() => ({}));
         const elapsedMs = Math.round(performance.now() - startedAt);
 
         setAnalysisState((prev) => {
-          const fetchPaceMs = {
-            current: elapsedMs,
-            ...(prev.fetchPaceMs?.current != null
-              ? {
-                previous: prev.fetchPaceMs.current,
-                diff: elapsedMs - prev.fetchPaceMs.current
-              }
-              : {})
-          };
-
-          console.log(
-            `[client:analysis-pace] ${u}/${r.name} current=${fetchPaceMs.current}ms prev=${fetchPaceMs.previous ?? "none"} diff=${fetchPaceMs.diff ?? "none"}`
-          );
-
+          const fetchPaceMs = withFetchPace(prev, elapsedMs);
           return {
             loading: false,
             error: errorRes.details || errorRes.error || "Analysis failed",
-            data: errorRes.analysis ? ({ codeAnalysis: errorRes.analysis, ollamaAnalysis: "" } as any) : undefined,
+            partialData: errorRes.analysis ? ({ codeAnalysis: errorRes.analysis } as any) : undefined,
             fetchPaceMs
           };
         });
@@ -73,45 +95,71 @@ export default function RepoItem({ repo: r, username }: { repo: Repo, username: 
         return;
       }
 
-      const resData = (await res.json()) as AnalysisResponse;
+      const startData = (await startRes.json()) as { jobId: string };
+      const jobId = startData.jobId;
+
+      if (!jobId) {
+        throw new Error("Could not create analysis job.");
+      }
+
+      setAnalysisState((prev) => ({ ...prev, jobId }));
+
+      while (true) {
+        await new Promise((resolve) => setTimeout(resolve, 900));
+
+        const pollRes = await fetch(`/api/analysis/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store" });
+        const pollBody = (await pollRes.json().catch(() => ({}))) as AnalysisJobPollResponse & { error?: string };
+
+        if (!pollRes.ok) {
+          throw new Error(pollBody.error || "Polling failed.");
+        }
+
+        setAnalysisState((prev) => {
+          const partialData = pollBody.data || prev.partialData;
+          const isCompleted = pollBody.status === "completed";
+
+          let finalData = prev.data;
+          if (isCompleted && partialData?.codeAnalysis) {
+            finalData = {
+              repository: partialData.repository || { owner: u, name: r.name },
+              codeAnalysis: partialData.codeAnalysis as any,
+              ollamaAnalysis: (partialData.ollamaAnalysis as string) || "",
+              roadmap: (partialData.roadmap as string | null) ?? null,
+              cache: partialData.cache,
+              backendPaceMs: partialData.backendPaceMs
+            };
+          }
+
+          return {
+            ...prev,
+            loading: pollBody.status === "queued" || pollBody.status === "running",
+            status: pollBody.status,
+            progress: pollBody.progress,
+            progressStep: pollBody.step,
+            progressLabel: pollBody.stepLabel,
+            error: pollBody.status === "failed" ? pollBody.error || "Analysis failed" : prev.error,
+            partialData,
+            data: finalData
+          };
+        });
+
+        if (pollBody.status === "completed" || pollBody.status === "failed") {
+          break;
+        }
+      }
+
       const elapsedMs = Math.round(performance.now() - startedAt);
 
       setAnalysisState((prev) => {
-        const fetchPaceMs = {
-          current: elapsedMs,
-          ...(prev.fetchPaceMs?.current != null
-            ? {
-              previous: prev.fetchPaceMs.current,
-              diff: elapsedMs - prev.fetchPaceMs.current
-            }
-            : {})
-        };
-
-        console.log(
-          `[client:analysis-pace] ${u}/${r.name} current=${fetchPaceMs.current}ms prev=${fetchPaceMs.previous ?? "none"} diff=${fetchPaceMs.diff ?? "none"}`
-        );
-
-        return { loading: false, data: resData, fetchPaceMs };
+        const fetchPaceMs = withFetchPace(prev, elapsedMs);
+        return { ...prev, loading: false, fetchPaceMs };
       });
     } catch (err) {
       const elapsedMs = Math.round(performance.now() - startedAt);
 
       setAnalysisState((prev) => {
-        const fetchPaceMs = {
-          current: elapsedMs,
-          ...(prev.fetchPaceMs?.current != null
-            ? {
-              previous: prev.fetchPaceMs.current,
-              diff: elapsedMs - prev.fetchPaceMs.current
-            }
-            : {})
-        };
-
-        console.log(
-          `[client:analysis-pace] ${u}/${r.name} current=${fetchPaceMs.current}ms prev=${fetchPaceMs.previous ?? "none"} diff=${fetchPaceMs.diff ?? "none"}`
-        );
-
-        return { loading: false, error: String(err), fetchPaceMs };
+        const fetchPaceMs = withFetchPace(prev, elapsedMs);
+        return { ...prev, loading: false, error: String(err), fetchPaceMs };
       });
     }
   }
@@ -157,6 +205,15 @@ export default function RepoItem({ repo: r, username }: { repo: Repo, username: 
           {analysisState.loading ? "Analyzing..." : "Analyze Code Quality"}
         </button>
 
+        {(analysisState.loading || analysisState.status) ? (
+          <AnalysisProgressChecklist
+            status={analysisState.status}
+            currentStep={analysisState.progressStep}
+            label={analysisState.progressLabel}
+            progress={analysisState.progress}
+          />
+        ) : null}
+
         {analysisState.error && (
           <div className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 border border-red-100">
             <span className="font-bold">Error:</span> {analysisState.error}
@@ -181,19 +238,19 @@ export default function RepoItem({ repo: r, username }: { repo: Repo, username: 
                 </span>
               </>
             ) : null}
-            {analysisState.data?.cache?.status ? (
+            {shownData?.cache?.status ? (
               <>
                 <span className="mx-2 text-slate-300">|</span>
-                <span>cache {analysisState.data.cache.status}</span>
+                <span>cache {shownData.cache.status}</span>
               </>
             ) : null}
-            {analysisState.data?.backendPaceMs ? (
+            {shownData?.backendPaceMs ? (
               <>
                 <span className="mx-2 text-slate-300">|</span>
                 <span>
-                  backend {analysisState.data.backendPaceMs.current}ms
-                  {analysisState.data.backendPaceMs.previous != null
-                    ? ` (prev ${analysisState.data.backendPaceMs.previous}ms)`
+                  backend {shownData.backendPaceMs.current}ms
+                  {shownData.backendPaceMs.previous != null
+                    ? ` (prev ${shownData.backendPaceMs.previous}ms)`
                     : ""}
                 </span>
               </>
@@ -201,43 +258,43 @@ export default function RepoItem({ repo: r, username }: { repo: Repo, username: 
           </div>
         )}
 
-        {analysisState.data && (
+        {shownData?.codeAnalysis && (
           <div className="mt-4 space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
                 <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Quality</div>
                 <div className="text-lg font-black text-orange-600">
-                  {analysisState.data.codeAnalysis?.qualityScore || 0}/100
+                  {(shownData.codeAnalysis as any)?.qualityScore || 0}/100
                 </div>
               </div>
               <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
                 <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Level</div>
                 <div className="text-lg font-bold capitalize text-slate-800">
-                  {analysisState.data.codeAnalysis?.developmentLevel || "N/A"}
+                  {(shownData.codeAnalysis as any)?.developmentLevel || "N/A"}
                 </div>
               </div>
               <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
                 <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Functions</div>
                 <div className="text-lg font-black text-slate-800">
-                  {analysisState.data.codeAnalysis?.complexity?.functionCount || 0}
+                  {(shownData.codeAnalysis as any)?.complexity?.functionCount || 0}
                 </div>
               </div>
               <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
                 <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Classes</div>
                 <div className="text-lg font-black text-slate-800">
-                  {analysisState.data.codeAnalysis?.complexity?.classCount || 0}
+                  {(shownData.codeAnalysis as any)?.complexity?.classCount || 0}
                 </div>
               </div>
               <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
                 <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Loops</div>
                 <div className="text-lg font-black text-slate-800">
-                  {analysisState.data.codeAnalysis?.complexity?.loopCount || 0}
+                  {(shownData.codeAnalysis as any)?.complexity?.loopCount || 0}
                 </div>
               </div>
               <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
                 <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Conditions</div>
                 <div className="text-lg font-black text-slate-800">
-                  {analysisState.data.codeAnalysis?.complexity?.conditionCount || 0}
+                  {(shownData.codeAnalysis as any)?.complexity?.conditionCount || 0}
                 </div>
               </div>
             </div>
@@ -247,54 +304,54 @@ export default function RepoItem({ repo: r, username }: { repo: Repo, username: 
               <div className="rounded-lg bg-emerald-50/50 p-3 border border-emerald-100">
                 <div className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">Lines Of Code</div>
                 <div className="text-md font-black text-emerald-700">
-                  {analysisState.data.codeAnalysis?.complexity?.lineCount || 0}
+                  {(shownData.codeAnalysis as any)?.complexity?.lineCount || 0}
                 </div>
               </div>
               <div className="rounded-lg bg-blue-50/50 p-3 border border-blue-100">
                 <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Comments</div>
                 <div className="text-md font-black text-blue-700">
-                  {analysisState.data.codeAnalysis?.complexity?.commentCount || 0}
+                  {(shownData.codeAnalysis as any)?.complexity?.commentCount || 0}
                 </div>
               </div>
               <div className="rounded-lg bg-slate-50 p-3 border border-slate-100">
                 <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Blank Lines</div>
                 <div className="text-md font-black text-slate-700">
-                  {analysisState.data.codeAnalysis?.complexity?.blankCount || 0}
+                  {(shownData.codeAnalysis as any)?.complexity?.blankCount || 0}
                 </div>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {analysisState.data.codeAnalysis?.hasTests && (
+              {(shownData.codeAnalysis as any)?.hasTests && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-bold text-green-800">
                   ✓ Tests
                 </span>
               )}
-              {analysisState.data.codeAnalysis?.hasCI && (
+              {(shownData.codeAnalysis as any)?.hasCI && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-800">
                   ✓ CI/CD
                 </span>
               )}
-              {analysisState.data.codeAnalysis?.hasTypeScript && (
+              {(shownData.codeAnalysis as any)?.hasTypeScript && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-bold text-purple-800">
                   ✓ TypeScript
                 </span>
               )}
-              {analysisState.data.codeAnalysis?.hasDocker && (
+              {(shownData.codeAnalysis as any)?.hasDocker && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800">
                   ✓ Docker
                 </span>
               )}
             </div>
 
-            {analysisState.data.ollamaAnalysis && (
+            {shownData?.ollamaAnalysis ? (
               <div className="mt-3 rounded-xl border border-orange-100 bg-orange-50/50 p-4">
                 <div className="text-xs font-bold uppercase tracking-wider text-orange-900 mb-2">AI Analysis</div>
                 <div className="whitespace-pre-wrap text-sm text-orange-900/80 leading-relaxed">
-                  {analysisState.data.ollamaAnalysis}
+                  {shownData.ollamaAnalysis}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         )}
       </div>

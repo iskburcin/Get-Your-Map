@@ -7,6 +7,11 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   ollama:
     image: ollama/ollama:latest
@@ -14,8 +19,32 @@ services:
     restart: unless-stopped
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
     volumes:
-      - ollama_data:/root/.ollama
+      - "C:\\Users\\burci\\.ollama:/root/.ollama"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ollama_init:
+    image: ollama/ollama:latest
+    container_name: gym_ollama_init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_REPO_MODELS=${OLLAMA_REPO_MODELS:-qwen2.5:1.5b,qwen2.5:14b,gemma3:1b,deepseek-coder-v2:16b}
+    entrypoint:
+      [
+        "/bin/sh",
+        "-c",
+        "MODELS=$$(echo $${OLLAMA_REPO_MODELS:-qwen2.5:1.5b,qwen2.5:14b,gemma3:1b,deepseek-coder-v2:16b} | tr ',' ' '); for model in $$MODELS; do echo Pulling model: $$model; ollama pull $$model; done; echo Model prefetch completed.",
+      ]
+    restart: "no"
 
   server:
     build:
@@ -23,17 +52,22 @@ services:
       dockerfile: Dockerfile
     container_name: gym_server
     restart: unless-stopped
+    env_file:
+      - .env.docker
     depends_on:
-      - mongo
-      - ollama
+      mongo:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
     environment:
       PORT: 4000
-      BACKEND_BASE_URL: http://server
+      BACKEND_BASE_URL: http://server:4000
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017}
       MONGODB_DB_NAME: ${MONGODB_DB_NAME:-github_info_ui}
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
+      OLLAMA_REPO_MODEL: ${OLLAMA_REPO_MODEL:-qwen2.5:1.14b}
+      OLLAMA_CODER_MODEL: ${OLLAMA_CODER_MODEL:-deepseek-coder-v2:16b}
     ports:
       - "4000:4000"
 
@@ -47,10 +81,9 @@ services:
       - server
     environment:
       PORT: 3000
-      BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://server:4000}
+      BACKEND_BASE_URL: http://server:4000
     ports:
       - "3000:3000"
 
 volumes:
   mongo_data:
-  ollama_data:
