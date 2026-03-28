@@ -48,7 +48,7 @@ If backend is in cloud and Ollama is at home:
 2. Expose `11434` with a secure tunnel provider.
 3. Copy the public HTTPS URL from tunnel.
 4. In backend host environment variables set:
-   - `OLLAMA_URL=https://your-ollama-tunnel-url`
+   - `OLLAMA_URL=https://<your-tunnel-url>`
    - `OLLAMA_MODEL=qwen2.5:1.5b` (or your model)
 5. Restart backend service.
 

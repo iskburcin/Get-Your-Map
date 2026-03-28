@@ -66,7 +66,6 @@ MONGODB_DB_NAME=github_info_ui
 # MONGODB_DB_NAME=github_info_ui
 
 # Ollama (Optional, for AI insights)
-OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:1.5b
 ```
 

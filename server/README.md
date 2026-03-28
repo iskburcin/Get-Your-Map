@@ -36,6 +36,7 @@ npm install
 
 ### 3. Environment Variables
 
+s
 Create a `.env` file in the root of the `server/` directory:
 
 ```env
@@ -47,7 +48,6 @@ PORT=4000
 BACKEND_BASE_URL=http://localhost
 
 # Ollama Configuration (Local AI)
-OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:1.5b
 
 # MongoDB Cache (Optional, enables persistent cache)
